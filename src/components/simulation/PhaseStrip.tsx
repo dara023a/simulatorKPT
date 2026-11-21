@@ -44,7 +44,7 @@ const STAGES = [
   },
 ]
 
-function currentStage(phase: string, returning: boolean): number {
+function currentStage(phase: string, returning: boolean, processing: boolean): number {
   switch (phase) {
     case 'ready':
       return -1
@@ -57,7 +57,7 @@ function currentStage(phase: string, returning: boolean): number {
     case 'distribution':
       return 3
     case 'processing':
-      return returning ? 5 : 4
+      return returning && !processing ? 5 : 4
     case 'aggregation':
       return 6
     case 'completed':
@@ -70,7 +70,10 @@ function currentStage(phase: string, returning: boolean): number {
 export function PhaseStrip() {
   const { state } = useSimulation()
   const returning = state.workers.some((worker) => worker.status === 'returning')
-  const active = currentStage(state.phase, returning)
+  const processing = state.workers.some(
+    (worker) => worker.status === 'processing' || worker.status === 'receiving',
+  )
+  const active = currentStage(state.phase, returning, processing)
 
   return (
     <div>
