@@ -80,7 +80,11 @@ export function DatasetPage() {
                 <button
                   key={dataset.id}
                   type="button"
-                  onClick={() => selectDataset(dataset)}
+                  onClick={() => {
+                    selectDataset(dataset)
+                    setFileName(null)
+                    setError(null)
+                  }}
                   className={`rounded-lg border p-3 text-left transition ${
                     selected
                       ? 'border-accent/60 bg-cyan-500/[0.06]'
@@ -222,9 +226,10 @@ export function DatasetPage() {
       </div>
 
       <Note tone="warning" title="Dataset honesty">
-        The bundled dataset is a generated 240-document simulation inspired by the 20 Newsgroups
-        topic list, not the real 18,846-document archive. It exists so the demo runs offline without
-        scikit-learn or a network connection. Uploaded files are read locally in your browser.
+        The bundled datasets are generated simulations (240 and 90 documents), inspired by the 20
+        Newsgroups topic list but not the real 18,846-document archive. They exist so the demo runs
+        offline without scikit-learn or a network connection. Uploaded files are read locally in
+        your browser.
       </Note>
     </div>
   )
