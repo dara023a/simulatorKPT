@@ -30,7 +30,7 @@ export function tokenize(text: string): string[] {
 
 export function topWords(frequencies: Record<string, number>, limit: number): WordCount[] {
   return Object.entries(frequencies)
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .slice(0, limit)
     .map(([word, count]) => ({ word, count }))
 }
