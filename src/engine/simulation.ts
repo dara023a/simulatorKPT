@@ -131,7 +131,12 @@ function assignQueuedTasks(state: SimulationState): number {
   let assigned = 0
 
   for (const worker of state.workers) {
-    if (worker.status !== 'idle' && worker.status !== 'completed') continue
+    if (worker.status === 'completed') {
+      const lastEndTick = worker.timeline[worker.timeline.length - 1]?.endTick
+      if (lastEndTick === undefined || lastEndTick >= state.tick - 1) continue
+    } else if (worker.status !== 'idle' && worker.status !== 'registered') {
+      continue
+    }
     const taskId = state.queue.shift()
     if (!taskId) break
     const task = state.tasks.find((candidate) => candidate.id === taskId)
@@ -264,7 +269,6 @@ export function advance(state: SimulationState): SimulationState {
             ...worker.timeline,
             { taskId: task.id, startTick: startedTick, endTick: next.tick },
           ]
-          worker.currentTaskId = null
           log(
             next,
             `${worker.id} completed ${task.id}: ${task.docCount} docs, ${task.analysis.wordCount} words. Returning result to master.`,
@@ -275,8 +279,12 @@ export function advance(state: SimulationState): SimulationState {
       }
 
       for (const worker of next.workers) {
-        if (worker.status !== 'returning') continue
+        if (worker.status !== 'returning' || !worker.currentTaskId) continue
+        const task = next.tasks.find((candidate) => candidate.id === worker.currentTaskId)
+        if (!task || task.finishedTick === null || task.finishedTick >= next.tick) continue
         worker.status = 'completed'
+        worker.progress = 0
+        worker.currentTaskId = null
         log(next, `Master received the result payload from ${worker.id}.`, 'result', 'master')
       }
 
@@ -358,13 +366,15 @@ export function advance(state: SimulationState): SimulationState {
 
 export function getAggregatePreview(state: SimulationState) {
   if (state.aggregate) return state.aggregate
-  if (Object.keys(state.masterFrequencies).length > 0) {
-    const totalDocs = state.tasks
-      .filter((task) => task.status === 'returned' || task.status === 'aggregated')
-      .reduce((sum, task) => sum + task.docCount, 0)
-    return summarize(state.masterFrequencies, totalDocs, 12)
-  }
-  return null
+  const hasReturnedResults = state.workers.some((worker) => worker.tasksCompleted > 0)
+  if (!hasReturnedResults) return null
+
+  const merged: Record<string, number> = {}
+  for (const worker of state.workers) mergeInto(merged, worker.frequencies)
+  const totalDocs = state.tasks
+    .filter((task) => task.status === 'returned' || task.status === 'aggregated')
+    .reduce((sum, task) => sum + task.docCount, 0)
+  return summarize(merged, totalDocs, 12)
 }
 
 export function getLeaderWords(state: SimulationState, limit = 5) {
