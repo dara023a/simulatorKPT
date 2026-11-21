@@ -43,7 +43,7 @@ function WorkerFlowNode({ data, selected }: NodeProps) {
         selected ? 'border-accent' : isProcessing ? 'border-cyan-500/40' : 'border-line',
       )}
     >
-      <Handle type="target" position={Position.Left} className="!opacity-0" />
+      <Handle type="target" position={Position.Top} className="!opacity-0" />
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[12px] font-semibold text-mist">
           <Cpu size={13} className="text-info" />
@@ -110,7 +110,7 @@ function MasterFlowNode({ data, selected }: NodeProps) {
       <div className="mt-2 rounded border border-line-soft bg-ink-850 px-2 py-1 text-[9px] text-faint">
         Task queue owner · result aggregator
       </div>
-      <Handle type="source" position={Position.Right} className="!opacity-0" />
+      <Handle type="source" position={Position.Bottom} className="!opacity-0" />
     </div>
   )
 }
@@ -180,7 +180,7 @@ const edgeTypes = {
   packet: PacketEdge,
 }
 
-const MASTER_POSITION = { x: 0, y: 470 }
+const MASTER_POSITION = { x: 270, y: 0 }
 
 export function NetworkGraph({
   onSelect,
@@ -209,7 +209,7 @@ export function NetworkGraph({
       ...state.workers.map((worker, index) => ({
         id: worker.id,
         type: 'worker',
-        position: { x: 440, y: index * 116 },
+        position: { x: (index % 3) * 270, y: 150 + Math.floor(index / 3) * 140 },
         draggable: false,
         data: { worker },
       })),
@@ -239,7 +239,7 @@ export function NetworkGraph({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.22 }}
+        fitViewOptions={{ padding: 0.16 }}
         minZoom={0.35}
         maxZoom={1.4}
         nodesDraggable={false}
