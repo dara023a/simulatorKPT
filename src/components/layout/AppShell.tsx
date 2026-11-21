@@ -4,17 +4,18 @@ import {
   Database,
   LayoutDashboard,
   ListChecks,
+  ListOrdered,
   Network,
   PlayCircle,
 } from 'lucide-react'
 import { cx, Tag } from '../ui/Primitives'
-import { phaseLabel } from '../../lib/format'
+import { mergeLabel, phaseLabel, scheduleLabel } from '../../lib/format'
 import { useSimulation } from '../../engine/SimulationProvider'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', icon: LayoutDashboard },
   { to: '/topology', label: 'Network Topology', icon: Network },
-  { to: '/dataset', label: 'Dataset Explorer', icon: Database },
+  { to: '/dataset', label: 'Dataset & Benchmarks', icon: Database },
   { to: '/tasks', label: 'Task Distribution', icon: ListChecks },
   { to: '/simulation', label: 'Simulation', icon: PlayCircle },
   { to: '/results', label: 'Results', icon: BarChart3 },
@@ -23,27 +24,27 @@ const NAV_ITEMS = [
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/': {
     title: 'Overview',
-    subtitle: 'Master–Worker architecture for distributed text analytics',
+    subtitle: 'Master–Worker architecture for distributed sorting',
   },
   '/topology': {
     title: 'Network Topology',
-    subtitle: 'Click any simulated node to inspect its state and payload',
+    subtitle: 'Klik node simulasi untuk melihat chunk, core, progress, dan checksum',
   },
   '/dataset': {
-    title: 'Dataset Explorer',
-    subtitle: 'Preview the local corpus and choose what the master will process',
+    title: 'Dataset & Benchmarks',
+    subtitle: 'Array input deterministik dan import results.csv dari eksekusi Python',
   },
   '/tasks': {
     title: 'Task Distribution',
-    subtitle: 'How the master decomposes documents and feeds the worker queue',
+    subtitle: 'Bagaimana master memecah array dan mengisi antrean worker',
   },
   '/simulation': {
     title: 'Simulation',
-    subtitle: 'Eight-phase walkthrough: discovery, distribution, processing, aggregation',
+    subtitle: 'Delapan fase: discovery, chunking, parallel sort, return, merge, verify',
   },
   '/results': {
     title: 'Results & Analytics',
-    subtitle: 'Aggregated word counts returned by every simulated worker',
+    subtitle: 'Sorted output, kontribusi worker, merge tree, dan benchmark Python',
   },
 }
 
@@ -51,10 +52,10 @@ function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-5 py-5">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10">
-        <Network size={18} className="text-accent" />
+        <ListOrdered size={18} className="text-accent" />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold text-mist">Distributed Text Analytics</p>
+        <p className="truncate text-[13px] font-semibold text-mist">Distributed Sorting</p>
         <p className="text-[10px] tracking-wide text-faint">Master–Worker Simulation</p>
       </div>
     </div>
@@ -107,14 +108,28 @@ export function AppShell() {
               Simulation Mode
             </div>
             <p className="mt-1.5 text-[10px] leading-relaxed text-faint">
-              All nodes, IP addresses, timings and analytics are simulated demo data. No real
-              devices or CPU measurements are used.
+              Node, IP, timing, dan sorting dijalankan di browser. results.csv yang diimpor adalah
+              metrik nyata dari eksekusi Python Anda.
             </p>
+            <div className="mt-2.5 grid gap-1 border-t border-line-soft pt-2 text-[9px] text-faint">
+              <div className="flex items-center justify-between gap-2">
+                <span>Workers</span>
+                <span className="font-mono text-muted">{state.settings.workerCount}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span>Schedule</span>
+                <span className="truncate font-mono text-muted">{scheduleLabel(state.settings.schedule)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span>Merge</span>
+                <span className="truncate font-mono text-muted">{mergeLabel(state.settings.mergeMode)}</span>
+              </div>
+            </div>
           </div>
           <div className="px-1 text-[9px] leading-relaxed tracking-wide text-faint/80">
             UAS · Komputasi Paralel &amp; Sistem Terdistribusi
             <br />
-            v1.0 · Simulation build
+            v2.0 · Distributed sorting build
           </div>
         </div>
       </aside>
@@ -174,8 +189,8 @@ export function AppShell() {
         </main>
 
         <footer className="border-t border-line px-4 py-4 text-[10px] text-faint lg:px-8">
-          Distributed Text Analytics — Master–Worker Simulation · Interactive course demo.
-          Metrics are labelled simulated results, not benchmarks.
+          Distributed Sorting — Master–Worker Simulation · Interactive course demo. Simulated
+          timings are labelled; imported Python benchmark rows remain measurement data.
         </footer>
       </div>
     </div>

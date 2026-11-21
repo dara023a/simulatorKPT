@@ -5,46 +5,45 @@ import { cx } from '../ui/Primitives'
 const STAGES = [
   {
     title: 'Initialization',
-    description: 'Master starts, the dataset is loaded, and every worker remains idle.',
+    description: 'Master memuat array input; seluruh worker masih idle.',
   },
   {
     title: 'Node Discovery',
     description:
-      'Master broadcasts discovery probes in the LAN model; each worker answers and registers with its simulated hostname, IP and core count.',
+      'Master mengirim probe discovery UDP simulasi; setiap worker menjawab dengan hostname, IP, dan jumlah core.',
   },
   {
-    title: 'Task Decomposition',
+    title: 'Chunk Decomposition',
     description:
-      'Master preprocesses the dataset and splits document indexes into fixed-size tasks.',
+      'Master memecah array menjadi chunk. Static memakai satu chunk per worker; dynamic memakai beberapa chunk per worker.',
   },
   {
     title: 'Task Distribution',
     description:
-      'Tasks move over the simulated links. The master keeps a queue and fills free workers from it.',
+      'Chunk bergerak dari master ke worker. Dynamic scheduler mengisi worker yang bebas dari antrean.',
   },
   {
-    title: 'Parallel Processing',
+    title: 'Parallel Sorting',
     description:
-      'Workers count word frequencies, unique words and document totals at the same time. Simulated cores affect task duration.',
+      'Setiap worker membagi chunk ke beberapa local run sesuai core, menyortir run secara paralel, lalu merge lokal.',
   },
   {
     title: 'Result Return',
     description:
-      'Each worker returns a compact JSON-style result payload containing its merged word Counter.',
+      'Worker mengirim sorted run beserta checksum kembali ke master.',
   },
   {
-    title: 'Result Aggregation',
+    title: 'Merge & Verify',
     description:
-      'Master merges every worker Counter into one combined frequency table. Merging is additive and deterministic.',
+      'Master membangun merge tree (langsung atau tiered). Hasil dicek harus terurut dan checksum-nya sama.',
   },
   {
     title: 'Completed',
-    description:
-      'All documents are processed and the final text analytics are available in Results.',
+    description: 'Sorted output final tersedia di halaman Results.',
   },
 ]
 
-function currentStage(phase: string, returning: boolean, processing: boolean): number {
+function currentStage(phase: string, returning: boolean, sorting: boolean): number {
   switch (phase) {
     case 'ready':
       return -1
@@ -57,7 +56,7 @@ function currentStage(phase: string, returning: boolean, processing: boolean): n
     case 'distribution':
       return 3
     case 'processing':
-      return returning && !processing ? 5 : 4
+      return returning && !sorting ? 5 : 4
     case 'aggregation':
       return 6
     case 'completed':
@@ -70,10 +69,10 @@ function currentStage(phase: string, returning: boolean, processing: boolean): n
 export function PhaseStrip() {
   const { state } = useSimulation()
   const returning = state.workers.some((worker) => worker.status === 'returning')
-  const processing = state.workers.some(
-    (worker) => worker.status === 'processing' || worker.status === 'receiving',
+  const sorting = state.workers.some((worker) =>
+    ['receiving', 'processing', 'merging'].includes(worker.status),
   )
-  const active = currentStage(state.phase, returning, processing)
+  const active = currentStage(state.phase, returning, sorting)
 
   return (
     <div>
@@ -127,7 +126,7 @@ export function PhaseStrip() {
         </p>
         <p className="mt-1 text-[11px] leading-relaxed text-muted">
           {active < 0
-            ? 'Press Play or Step to walk through the eight simulation phases. Every tick is deterministic and repeatable.'
+            ? 'Tekan Play atau Step untuk menjalani delapan fase sorting. Setiap tick deterministik dan dapat diulang.'
             : STAGES[active].description}
         </p>
       </div>

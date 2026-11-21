@@ -5,8 +5,11 @@ const KIND_DOT: Record<LogKind, string> = {
   system: 'bg-info',
   discovery: 'bg-sky-400',
   task: 'bg-accent',
+  sort: 'bg-cyan-300',
   result: 'bg-ok',
+  merge: 'bg-violet-300',
   error: 'bg-bad',
+  recovery: 'bg-amber-300',
 }
 
 export function EventLog({ limit = 12 }: { limit?: number }) {

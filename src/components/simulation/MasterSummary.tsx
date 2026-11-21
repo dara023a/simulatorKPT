@@ -1,16 +1,21 @@
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Server } from 'lucide-react'
+import { ArrowUpRight, GitMerge, Server } from 'lucide-react'
 import { useSimulation } from '../../engine/SimulationProvider'
-import { getAggregatePreview } from '../../engine/simulation'
 import { formatNumber } from '../../lib/format'
 import { Note, Panel, ProgressBar, Tag } from '../ui/Primitives'
+import { ArrayBars } from '../charts/ArrayBars'
 
 export function MasterSummary() {
   const { state, stats } = useSimulation()
-  const preview = getAggregatePreview(state)
   const finished = state.phase === 'completed'
   const merging = state.phase === 'aggregation'
-  const mergePct = Math.round((state.aggregationMerged / state.workers.length) * 100)
+  const mergePct =
+    stats.mergeGroupsTotal === 0
+      ? finished
+        ? 100
+        : 0
+      : Math.round((stats.mergeGroupsMerged / stats.mergeGroupsTotal) * 100)
+  const sortedPreview = state.aggregate?.sortedSample ?? state.baseline.sortedSample
 
   return (
     <Panel
@@ -20,20 +25,23 @@ export function MasterSummary() {
           Master Node
         </span>
       }
-      subtitle="Coordinates discovery, queueing, dispatch and aggregation"
+      subtitle="Owns the queue, dispatches chunks, and builds the merge tree"
       action={<Tag tone={finished ? 'emerald' : 'cyan'}>Simulated</Tag>}
     >
       <div className="flex items-center justify-between text-[10px] text-faint">
-        <span>Documents returned to master</span>
+        <span>Items returned to master</span>
         <span className="tabular-nums">
-          {formatNumber(stats.returnedDocs)} / {formatNumber(stats.docsTotal)}
+          {formatNumber(stats.returnedItems)} / {formatNumber(stats.itemsTotal)}
         </span>
       </div>
-      <ProgressBar value={stats.docsTotal === 0 ? 0 : (stats.returnedDocs / stats.docsTotal) * 100} className="mt-1.5" />
+      <ProgressBar
+        value={stats.itemsTotal === 0 ? 0 : (stats.returnedItems / stats.itemsTotal) * 100}
+        className="mt-1.5"
+      />
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-md border border-line bg-ink-850 px-2.5 py-2">
-          <p className="text-[9px] text-faint">Tasks returned</p>
+          <p className="text-[9px] text-faint">Chunks returned</p>
           <p className="text-sm font-semibold text-mist tabular-nums">
             {stats.returned}
             <span className="text-[10px] font-normal text-faint"> / {stats.tasksTotal}</span>
@@ -51,9 +59,9 @@ export function MasterSummary() {
           </p>
         </div>
         <div className="rounded-md border border-line bg-ink-850 px-2.5 py-2">
-          <p className="text-[9px] text-faint">Unique words</p>
-          <p className="text-sm font-semibold text-mist tabular-nums">
-            {preview ? formatNumber(preview.uniqueWords) : '—'}
+          <p className="text-[9px] text-faint">Mode</p>
+          <p className="text-[11px] font-semibold text-mist">
+            {state.settings.mergeMode === 'tiered' ? 'Tiered merge' : 'Master merge'}
           </p>
         </div>
       </div>
@@ -61,9 +69,11 @@ export function MasterSummary() {
       {(merging || finished) && (
         <div className="mt-3">
           <div className="flex items-center justify-between text-[10px] text-faint">
-            <span>Merged worker counters</span>
+            <span className="inline-flex items-center gap-1">
+              <GitMerge size={10} className="text-violet-300" /> Merge groups
+            </span>
             <span className="tabular-nums">
-              {state.aggregationMerged} / {state.workers.length}
+              {stats.mergeGroupsMerged} / {stats.mergeGroupsTotal}
             </span>
           </div>
           <ProgressBar value={mergePct} tone="emerald" className="mt-1.5" />
@@ -71,21 +81,21 @@ export function MasterSummary() {
       )}
 
       <div className="mt-3">
-        <p className="mb-1.5 text-[9px] font-semibold tracking-[0.12em] text-faint uppercase">
-          Top keywords in aggregate
-        </p>
-        {preview ? (
-          <div className="flex flex-wrap gap-1">
-            {preview.topWords.slice(0, 6).map((word) => (
-              <Tag key={word.word} tone="cyan">
-                {word.word}
-                <span className="text-cyan-200/60">{word.count}</span>
-              </Tag>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[10px] text-faint">Aggregate appears after results return.</p>
-        )}
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-[9px] font-semibold tracking-[0.12em] text-faint uppercase">
+            Sorted output preview
+          </p>
+          <Tag tone={finished ? 'emerald' : 'slate'}>
+            {finished ? 'verified' : 'projection'}
+          </Tag>
+        </div>
+        <div className="rounded-md border border-line-soft bg-ink-850/60 p-1.5">
+          <ArrayBars values={sortedPreview} tone={finished ? 'emerald' : 'cyan'} height={34} maxBars={54} />
+        </div>
+        <div className="mt-1 flex items-center justify-between text-[9px] text-faint">
+          <span>{formatNumber(state.baseline.totalItems)} items</span>
+          <span className="font-mono">checksum {formatNumber(state.aggregate?.checksum ?? state.baseline.checksum)}</span>
+        </div>
       </div>
 
       {finished ? (
@@ -99,8 +109,8 @@ export function MasterSummary() {
       ) : (
         <div className="mt-3">
           <Note tone="neutral">
-            Result previews come from counters already returned. Final numbers are produced only
-            after the aggregation phase.
+            Preview memakai array terurut yang diproyeksikan dari dataset. Angka final baru
+            dipublikasikan setelah merge dan verifikasi checksum selesai.
           </Note>
         </div>
       )}

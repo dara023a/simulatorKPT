@@ -1,7 +1,5 @@
-import { Cpu, Server } from 'lucide-react'
+import { Cpu, GitMerge, Server } from 'lucide-react'
 import { useSimulation } from '../../engine/SimulationProvider'
-import { topWords } from '../../engine/analyzer'
-import { getAggregatePreview } from '../../engine/simulation'
 import { formatNumber } from '../../lib/format'
 import {
   DetailRow,
@@ -12,22 +10,19 @@ import {
   StatusBadge,
   Tag,
 } from '../ui/Primitives'
+import { ArrayBars, MiniArray } from '../charts/ArrayBars'
+import { RunLanes } from '../charts/RunLanes'
 
 function MasterDetails({ onClose }: { onClose?: () => void }) {
-  const { state } = useSimulation()
-  const preview = getAggregatePreview(state)
+  const { state, stats } = useSimulation()
   const registered = state.workers.filter((worker) => worker.status !== 'idle').length
-  const returnedTasks = state.tasks.filter(
-    (task) => task.status === 'returned' || task.status === 'aggregated',
-  ).length
-  const status =
-    state.phase === 'completed'
-      ? 'completed'
-      : state.phase === 'discovery'
-        ? 'discovering'
-        : state.phase === 'ready' || state.phase === 'initialization'
-          ? 'idle'
-          : 'processing'
+  const sortedPreview = state.aggregate?.sortedSample ?? state.baseline.sortedSample
+  const mergePct =
+    stats.mergeGroupsTotal === 0
+      ? state.phase === 'completed'
+        ? 100
+        : 0
+      : Math.round((stats.mergeGroupsMerged / stats.mergeGroupsTotal) * 100)
 
   return (
     <DrawerShell
@@ -38,71 +33,55 @@ function MasterDetails({ onClose }: { onClose?: () => void }) {
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-[11px] text-muted">
           <Server size={14} className="text-master" />
-          Coordinator &amp; aggregator
+          Coordinator, queue owner &amp; merger
         </div>
-        <StatusBadge status={status} />
+        <StatusBadge status={state.master.status} />
       </div>
 
       <div>
         <DetailRow label="Node ID" value="master" />
         <DetailRow label="Simulated cores" value={state.master.cores} />
         <DetailRow label="Registered workers" value={`${registered} / ${state.workers.length}`} />
-        <DetailRow label="Tasks returned" value={`${returnedTasks} / ${state.tasks.length}`} />
+        <DetailRow label="Chunks returned" value={`${stats.returned} / ${stats.tasksTotal}`} />
         <DetailRow label="Task queue" value={`${state.queue.length} waiting`} />
+        <DetailRow label="Schedule" value={state.settings.schedule} />
+        <DetailRow label="Merge mode" value={state.settings.mergeMode} />
+        <DetailRow label="Merge groups" value={`${stats.mergeGroupsMerged} / ${stats.mergeGroupsTotal}`} />
         <DetailRow label="Simulated tick" value={state.tick} />
-        <DetailRow
-          label="Aggregation"
-          value={`${state.aggregationMerged} / ${state.workers.length} workers merged`}
-        />
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-[10px] text-faint">
+          <span className="inline-flex items-center gap-1">
+            <GitMerge size={10} className="text-violet-300" /> Merge progress
+          </span>
+          <span className="tabular-nums">{mergePct}%</span>
+        </div>
+        <ProgressBar value={mergePct} tone="emerald" className="mt-1.5" />
       </div>
 
       <div className="mt-4">
-        <p className="mb-2 text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">
-          Aggregate snapshot
-        </p>
-        {preview ? (
-          <>
-            <div className="mb-2 grid grid-cols-3 gap-2">
-              <div className="rounded-md border border-line bg-ink-850 px-2 py-1.5">
-                <p className="text-[9px] text-faint">Docs</p>
-                <p className="text-xs font-semibold text-mist tabular-nums">
-                  {formatNumber(preview.totalDocs)}
-                </p>
-              </div>
-              <div className="rounded-md border border-line bg-ink-850 px-2 py-1.5">
-                <p className="text-[9px] text-faint">Words</p>
-                <p className="text-xs font-semibold text-mist tabular-nums">
-                  {formatNumber(preview.totalWords)}
-                </p>
-              </div>
-              <div className="rounded-md border border-line bg-ink-850 px-2 py-1.5">
-                <p className="text-[9px] text-faint">Unique</p>
-                <p className="text-xs font-semibold text-mist tabular-nums">
-                  {formatNumber(preview.uniqueWords)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {preview.topWords.slice(0, 6).map((word) => (
-                <Tag key={word.word} tone="cyan">
-                  {word.word}
-                  <span className="text-cyan-200/60">{word.count}</span>
-                </Tag>
-              ))}
-            </div>
-          </>
-        ) : (
-          <EmptyState
-            title="No results aggregated yet"
-            hint="The master merges worker Counters after all task results are returned."
-          />
-        )}
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">
+            Sorted output
+          </p>
+          <Tag tone={state.aggregate?.checksumVerified ? 'emerald' : 'slate'}>
+            {state.aggregate?.checksumVerified ? 'checksum verified' : 'projection'}
+          </Tag>
+        </div>
+        <div className="rounded-md border border-line-soft bg-ink-850/60 p-1.5">
+          <ArrayBars values={sortedPreview} tone="emerald" height={42} maxBars={48} />
+        </div>
+        <div className="mt-1 flex justify-between font-mono text-[9px] text-faint">
+          <span>{formatNumber(state.baseline.totalItems)} items</span>
+          <span>checksum {formatNumber(state.aggregate?.checksum ?? state.baseline.checksum)}</span>
+        </div>
       </div>
 
       <div className="mt-4">
         <Note tone="neutral">
-          IP address, cores and timings are simulated fixture data. The master in the reference
-          Python code uses UDP discovery and TCP task transfer; this page only visualises the flow.
+          IP, cores, dan timing adalah fixture simulasi. Merge tree dan checksum dihitung dari
+          array yang benar-benar diproses di browser; bukan benchmark cluster.
         </Note>
       </div>
     </DrawerShell>
@@ -123,12 +102,12 @@ export function NodeDetailPanel({
       <DrawerShell title="Node Inspector" subtitle="Select a node on the graph">
         <EmptyState
           title="No node selected"
-          hint="Click the master node or any worker to inspect its simulated status, task, progress and result payload."
+          hint="Klik master atau worker untuk melihat status, chunk, local runs, progress, dan checksum."
         />
         <div className="mt-4">
           <Note tone="neutral">
-            Nine worker nodes are simulated in the browser. They do not represent physical machines
-            and do not open real TCP connections.
+            Node worker adalah simulasi. Tidak ada koneksi TCP/UDP nyata yang dibuka oleh halaman
+            ini; port 9999/9998 hanya direpresentasikan secara visual.
           </Note>
         </div>
       </DrawerShell>
@@ -149,7 +128,7 @@ export function NodeDetailPanel({
   }
 
   const task = state.tasks.find((candidate) => candidate.id === worker.currentTaskId)
-  const keywords = topWords(worker.frequencies, 6)
+  const lastRun = worker.completedRuns[worker.completedRuns.length - 1]
 
   return (
     <DrawerShell
@@ -168,9 +147,9 @@ export function NodeDetailPanel({
       <div>
         <DetailRow label="Node ID" value={worker.id} />
         <DetailRow label="Simulated cores" value={worker.cores} />
-        <DetailRow label="Current task" value={worker.currentTaskId ?? 'None'} />
+        <DetailRow label="Current chunk" value={worker.currentTaskId ?? 'None'} />
         <DetailRow
-          label="Task progress"
+          label="Chunk progress"
           value={
             <span className="inline-flex w-32 items-center justify-end gap-2">
               <ProgressBar value={worker.progress} height="h-1" />
@@ -178,67 +157,80 @@ export function NodeDetailPanel({
             </span>
           }
         />
-        <DetailRow label="Documents processed" value={formatNumber(worker.docsProcessed)} />
-        <DetailRow label="Words counted" value={formatNumber(worker.wordsProcessed)} />
-        <DetailRow label="Tasks completed" value={worker.tasksCompleted} />
+        <DetailRow label="Items sorted" value={formatNumber(worker.itemsProcessed)} />
+        <DetailRow label="Chunks completed" value={worker.tasksCompleted} />
         <DetailRow
-          label="Last task time"
+          label="Last chunk time"
           value={worker.lastTaskDurationSec === null ? '—' : `${worker.lastTaskDurationSec}s (simulated)`}
         />
+        <DetailRow label="Failures" value={worker.failures} />
+        {worker.recoverAtTick !== null && (
+          <DetailRow label="Rejoin at tick" value={worker.recoverAtTick} />
+        )}
       </div>
 
       {task && (
         <div className="mt-3 rounded-md border border-line bg-ink-850 px-3 py-2.5">
           <div className="flex items-center justify-between">
             <p className="font-mono text-[10px] text-accent">{task.id}</p>
-            <Tag tone="cyan">Simulated</Tag>
+            <Tag tone={task.status === 'returned' ? 'emerald' : 'cyan'}>{task.status}</Tag>
           </div>
           <p className="mt-1 text-[11px] text-muted">
-            Documents {task.startDoc + 1}–{task.endDoc + 1} · {task.docCount} docs ·{' '}
-            {formatNumber(task.analysis.wordCount)} words
+            Items {task.startIndex + 1}–{task.endIndex + 1} · {formatNumber(task.itemCount)} values ·
+            checksum {formatNumber(task.checksum)}
           </p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {task.analysis.topWords.slice(0, 4).map((word) => (
-              <Tag key={word.word}>
-                {word.word} <span className="text-faint">{word.count}</span>
-              </Tag>
-            ))}
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <p className="mb-1 text-[8px] tracking-wide text-faint uppercase">Input sample</p>
+              <MiniArray values={task.values} tone="cyan" height={26} maxBars={16} />
+            </div>
+            <div>
+              <p className="mb-1 text-[8px] tracking-wide text-faint uppercase">Sorted sample</p>
+              <MiniArray
+                values={task.sortedValues ?? task.values}
+                tone={task.sortedValues ? 'emerald' : 'amber'}
+                height={26}
+                maxBars={16}
+              />
+            </div>
           </div>
         </div>
       )}
 
       <div className="mt-4">
         <p className="mb-2 text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">
-          Returned result payload
+          Parallel local runs
         </p>
-        {keywords.length > 0 ? (
+        <RunLanes runs={task?.localRuns ?? []} compact />
+      </div>
+
+      <div className="mt-4">
+        <p className="mb-2 text-[10px] font-semibold tracking-[0.12em] text-faint uppercase">
+          Last returned run
+        </p>
+        {lastRun ? (
           <>
             <div className="flex flex-wrap gap-1.5">
-              {keywords.map((word) => (
-                <Tag key={word.word} tone="emerald">
-                  {word.word}
-                  <span className="text-emerald-200/60">{word.count}</span>
-                </Tag>
-              ))}
+              <Tag tone="emerald">{lastRun.taskId}</Tag>
+              <Tag tone="slate">{formatNumber(lastRun.itemCount)} items</Tag>
+              <Tag tone="cyan">checksum {formatNumber(lastRun.checksum)}</Tag>
             </div>
-            <p className="mt-2 text-[10px] text-faint">
-              Merged word Counter from {worker.tasksCompleted} completed task
-              {worker.tasksCompleted === 1 ? '' : 's'}.
-            </p>
+            <div className="mt-2">
+              <MiniArray values={lastRun.values} tone="emerald" height={34} maxBars={32} />
+            </div>
           </>
         ) : (
           <EmptyState
-            title="No result payload yet"
-            hint="A payload appears after this worker finishes a task and returns its word Counter."
+            title="No returned run yet"
+            hint="Sorted run muncul setelah worker menyelesaikan local sort dan merge."
           />
         )}
       </div>
 
       <div className="mt-4">
         <Note tone="neutral">
-          This worker is a visual simulation of a Python worker process. Multiprocessing, UDP port
-          9999 and TCP port 9998 are implementation details of the reference code, not live sockets
-          in this demo.
+          Worker ini adalah visualisasi proses Python worker. Local runs merepresentasikan
+          pembagian kerja per core; hasil dan checksum dihitung deterministik di browser.
         </Note>
       </div>
     </DrawerShell>

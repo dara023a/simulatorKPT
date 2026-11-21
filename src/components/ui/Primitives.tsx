@@ -23,14 +23,19 @@ const NODE_STATUS_META: Record<NodeStatus, { label: string; badge: string; dot: 
     dot: 'bg-blue-400',
   },
   receiving: {
-    label: 'Receiving Task',
+    label: 'Receiving Chunk',
     badge: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
     dot: 'bg-cyan-400',
   },
   processing: {
-    label: 'Processing',
+    label: 'Sorting',
     badge: 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
     dot: 'bg-cyan-300',
+  },
+  merging: {
+    label: 'Merging Runs',
+    badge: 'border-violet-400/30 bg-violet-400/10 text-violet-300',
+    dot: 'bg-violet-400',
   },
   returning: {
     label: 'Returning Result',
@@ -61,7 +66,7 @@ const TASK_STATUS_META: Record<TaskStatus, { label: string; badge: string; dot: 
     dot: 'bg-blue-400',
   },
   processing: {
-    label: 'Processing',
+    label: 'Sorting',
     badge: 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200',
     dot: 'bg-cyan-300',
   },
@@ -70,8 +75,8 @@ const TASK_STATUS_META: Record<TaskStatus, { label: string; badge: string; dot: 
     badge: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
     dot: 'bg-amber-400',
   },
-  aggregated: {
-    label: 'Aggregated',
+  merged: {
+    label: 'Merged',
     badge: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
     dot: 'bg-emerald-400',
   },
@@ -108,7 +113,13 @@ export function StatusBadge({ status }: { status: NodeStatus }) {
       label={meta.label}
       badge={meta.badge}
       dot={meta.dot}
-      pulse={status === 'receiving' || status === 'processing' || status === 'returning' || status === 'discovering'}
+      pulse={
+        status === 'receiving' ||
+        status === 'processing' ||
+        status === 'merging' ||
+        status === 'returning' ||
+        status === 'discovering'
+      }
     />
   )
 }

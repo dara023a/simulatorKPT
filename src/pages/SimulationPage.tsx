@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { ArrowRight, ListChecks } from 'lucide-react'
+import { ArrowRight, ListChecks, Cpu } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSimulation } from '../engine/SimulationProvider'
 import { SimulationControls } from '../components/simulation/SimulationControls'
+import { RunSettings } from '../components/simulation/RunSettings'
 import { PhaseStrip } from '../components/simulation/PhaseStrip'
 import { WorkerGrid } from '../components/simulation/WorkerGrid'
 import { EventLog } from '../components/simulation/EventLog'
 import { MasterSummary } from '../components/simulation/MasterSummary'
 import { NodeDetailPanel } from '../components/network/NodeDetailPanel'
-import { Note, Panel, Tag } from '../components/ui/Primitives'
+import { EmptyState, Note, Panel, Tag } from '../components/ui/Primitives'
+import { RunLanes } from '../components/charts/RunLanes'
 import { formatNumber } from '../lib/format'
 
 function QueuePreview() {
@@ -21,7 +23,7 @@ function QueuePreview() {
     <div>
       <div className="flex items-center justify-between text-[10px] text-faint">
         <span>Waiting chunks</span>
-        <span className="tabular-nums">{queued.length} tasks</span>
+        <span className="tabular-nums">{queued.length} chunks</span>
       </div>
       {queued.length > 0 ? (
         <div className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-y-auto pr-1">
@@ -29,10 +31,10 @@ function QueuePreview() {
             <span
               key={task.id}
               className="inline-flex items-center gap-1 rounded border border-line bg-ink-850 px-1.5 py-0.5 font-mono text-[9px] text-muted"
-              title={`Documents ${task.startDoc + 1}–${task.endDoc + 1}`}
+              title={`Items ${task.startIndex + 1}–${task.endIndex + 1}`}
             >
               {task.id}
-              <span className="text-faint">{task.docCount}d</span>
+              <span className="text-faint">{formatNumber(task.itemCount)}i</span>
             </span>
           ))}
           {queued.length > 18 && (
@@ -41,13 +43,13 @@ function QueuePreview() {
         </div>
       ) : (
         <p className="mt-2 rounded-md border border-dashed border-line px-3 py-4 text-center text-[10px] text-faint">
-          Queue drained — all tasks are assigned or finished.
+          Queue drained — semua chunk sudah diambil atau selesai.
         </p>
       )}
       <div className="mt-3 flex items-center justify-between text-[10px] text-faint">
-        <span>Result payloads returned</span>
+        <span>Sorted runs returned</span>
         <span className="tabular-nums">
-          {state.tasks.filter((task) => task.status === 'returned' || task.status === 'aggregated').length} /{' '}
+          {state.tasks.filter((task) => task.status === 'returned' || task.status === 'merged').length} /{' '}
           {state.tasks.length}
         </span>
       </div>
@@ -62,6 +64,53 @@ function QueuePreview() {
   )
 }
 
+function ParallelRunsPanel() {
+  const { state } = useSimulation()
+  const active = state.tasks.filter(
+    (task) =>
+      task.localRuns.length > 0 &&
+      (task.status === 'assigned' || task.status === 'processing' || task.status === 'returned'),
+  )
+  const visible = active.slice(-3)
+
+  return (
+    <Panel
+      title="Parallel local sort"
+      subtitle="Satu baris per core · run disortir paralel lalu digabung di worker"
+      action={<Tag tone="cyan">{active.length} active chunks</Tag>}
+    >
+      {visible.length > 0 ? (
+        <div className="space-y-3">
+          {visible.map((task) => {
+            const worker = state.workers.find((candidate) => candidate.id === task.workerId)
+            return (
+              <div key={task.id} className="rounded-md border border-line bg-ink-850/60 px-3 py-2.5">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] text-muted">
+                    <Cpu size={11} className="text-accent" />
+                    <span className="font-mono text-mist">{task.id}</span>
+                    <span className="text-faint">on {worker?.id ?? 'unassigned'}</span>
+                  </span>
+                  <span className="text-[9px] text-faint">
+                    {formatNumber(task.itemCount)} items · {task.localRuns.length} core runs ·{' '}
+                    {Math.round(task.progress)}%
+                  </span>
+                </div>
+                <RunLanes runs={task.localRuns} compact />
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <EmptyState
+          title="No active local runs"
+          hint="Local runs muncul saat chunk sampai di worker; setiap core mendapat rentang tersendiri."
+        />
+      )}
+    </Panel>
+  )
+}
+
 export function SimulationPage() {
   const { state, stats } = useSimulation()
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
@@ -73,8 +122,16 @@ export function SimulationPage() {
       </Panel>
 
       <Panel
+        title="Run configuration"
+        subtitle="Mengubah nilai di bawah mereset simulasi; kontrol Play/Pause tetap tersedia"
+        action={<Tag tone="amber">Reset on change</Tag>}
+      >
+        <RunSettings />
+      </Panel>
+
+      <Panel
         title="Process phases"
-        subtitle="Phase progress is derived from the shared simulation state, not wall-clock animation"
+        subtitle="Progress diturunkan dari shared simulation state, bukan animasi wall-clock"
         action={
           <Tag tone={state.phase === 'completed' ? 'emerald' : state.running ? 'cyan' : 'slate'}>
             <span
@@ -86,7 +143,7 @@ export function SimulationPage() {
                     : 'bg-slate-500'
               }`}
             />
-            {stats.progressPct}% tasks returned
+            {stats.progressPct}% chunks returned
           </Tag>
         }
       >
@@ -97,16 +154,18 @@ export function SimulationPage() {
         <div className="space-y-4">
           <Panel
             title="Worker fleet"
-            subtitle="Click any worker to inspect its task, progress and returned Counter"
-            action={<Tag tone="cyan">{formatNumber(stats.docsTotal)} docs</Tag>}
+            subtitle="Klik worker untuk melihat chunk, input/sorted sample, local runs, dan checksum"
+            action={<Tag tone="cyan">{formatNumber(stats.itemsTotal)} items</Tag>}
           >
             <WorkerGrid selectedId={selectedNode} onSelect={setSelectedNode} />
           </Panel>
 
+          <ParallelRunsPanel />
+
           <div className="grid gap-4 md:grid-cols-2">
             <Panel
-              title="Task queue"
-              subtitle="Dynamic refill simulated by the scheduler"
+              title="Chunk queue"
+              subtitle="Dynamic pull atau static ownership sesuai konfigurasi"
               action={<Tag tone="slate">{state.queue.length} waiting</Tag>}
             >
               <QueuePreview />
@@ -114,7 +173,7 @@ export function SimulationPage() {
 
             <Panel
               title="Event log"
-              subtitle="Timestamps use the simulated clock"
+              subtitle="Timestamp memakai simulated clock"
               action={
                 <Tag tone="cyan">
                   <ListChecks size={10} /> {state.events.length} events
@@ -134,9 +193,9 @@ export function SimulationPage() {
       </div>
 
       <Note tone="warning" title="Simulation scope">
-        Play/Pause/Step/Reset drive a deterministic local state machine. The animated packets,
-        discovery ticks and processing durations are illustrative; they are not measured network or
-        CPU timings. Resetting rebuilds the same initial state, so results are reproducible.
+        Play/Pause/Step/Reset menjalankan state machine deterministik. Paket, discovery tick,
+        durasi, dan kegagalan worker adalah ilustrasi; bukan pengukuran CPU atau jaringan. Reset
+        membangun state awal yang sama sehingga hasil dapat direproduksi.
       </Note>
     </div>
   )

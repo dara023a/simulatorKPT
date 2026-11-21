@@ -4,6 +4,7 @@ export type NodeStatus =
   | 'registered'
   | 'receiving'
   | 'processing'
+  | 'merging'
   | 'returning'
   | 'completed'
   | 'failed'
@@ -19,59 +20,75 @@ export type Phase =
   | 'completed'
 
 export type Speed = 0.5 | 1 | 2 | 4
+export type ScheduleMode = 'dynamic' | 'static'
+export type MergeMode = 'master' | 'tiered'
+export type ArrayPattern = 'random' | 'duplicates' | 'nearly-sorted'
 
-export interface WordCount {
-  word: string
-  count: number
-}
-
-export interface TextDoc {
-  id: string
-  title: string
-  category: string
-  text: string
-}
-
-export interface Dataset {
+export interface SortingDataset {
   id: string
   name: string
   shortName: string
   description: string
-  source: 'demo' | 'sample' | 'upload'
-  categories: string[]
-  docs: TextDoc[]
-  taskSize: number
+  source: 'synthetic' | 'preset'
+  totalItems: number
+  values: number[]
+  pattern: ArrayPattern
+  seed: number
   note: string
 }
 
-export interface TaskAnalysis {
-  wordCount: number
-  uniqueWords: number
-  frequencies: Record<string, number>
-  topWords: WordCount[]
+export interface HistogramBin {
+  label: string
+  from: number
+  to: number
+  count: number
 }
 
-export type TaskStatus = 'queued' | 'assigned' | 'processing' | 'returned' | 'aggregated'
+export interface LocalRun {
+  coreIndex: number
+  start: number
+  end: number
+  itemCount: number
+  progress: number
+  sorted: boolean
+  min: number
+  max: number
+  sample: number[]
+}
+
+export type TaskStatus = 'queued' | 'assigned' | 'processing' | 'returned' | 'merged'
 
 export interface Task {
   id: string
   index: number
-  startDoc: number
-  endDoc: number
-  docCount: number
+  startIndex: number
+  endIndex: number
+  itemCount: number
   status: TaskStatus
   workerId: string | null
+  owner: string | null
   progress: number
   durationTicks: number
   startedTick: number | null
   finishedTick: number | null
-  analysis: TaskAnalysis
+  retries: number
+  values: number[]
+  localRuns: LocalRun[]
+  sortedValues: number[] | null
+  checksum: number
 }
 
 export interface TimelineEntry {
   taskId: string
   startTick: number
   endTick: number
+}
+
+export interface WorkerRun {
+  taskId: string
+  values: number[]
+  checksum: number
+  itemCount: number
 }
 
 export interface WorkerNode {
@@ -83,12 +100,14 @@ export interface WorkerNode {
   status: NodeStatus
   currentTaskId: string | null
   progress: number
-  docsProcessed: number
-  wordsProcessed: number
+  itemsProcessed: number
   tasksCompleted: number
   lastTaskDurationSec: number | null
-  frequencies: Record<string, number>
+  localMergeProgress: number
+  completedRuns: WorkerRun[]
   timeline: TimelineEntry[]
+  failures: number
+  recoverAtTick: number | null
 }
 
 export interface MasterNode {
@@ -97,9 +116,64 @@ export interface MasterNode {
   ip: string
   cores: number
   status: NodeStatus
+  mergeProgress: number
 }
 
-export type LogKind = 'system' | 'discovery' | 'task' | 'result' | 'error'
+export interface MergeGroup {
+  id: string
+  level: number
+  workerId: string | null
+  inputIds: string[]
+  inputSizes: number[]
+  outputSize: number
+  status: 'pending' | 'merged'
+}
+
+export interface MergeLayer {
+  level: number
+  label: string
+  groups: MergeGroup[]
+}
+
+export interface SortAggregate {
+  totalItems: number
+  chunkCount: number
+  uniqueValues: number
+  min: number
+  max: number
+  median: number
+  checksum: number
+  sorted: boolean
+  checksumVerified: boolean
+  sortedSample: number[]
+  histogram: HistogramBin[]
+  mergeMode: MergeMode
+  mergeGroups: MergeGroup[]
+  workerRuns: number
+  tieredMerges: number
+  mergeDurationTicks: number
+}
+
+export interface SortBaseline {
+  totalItems: number
+  uniqueValues: number
+  min: number
+  max: number
+  median: number
+  checksum: number
+  sortedSample: number[]
+  histogram: HistogramBin[]
+}
+
+export type LogKind =
+  | 'system'
+  | 'discovery'
+  | 'task'
+  | 'sort'
+  | 'result'
+  | 'merge'
+  | 'error'
+  | 'recovery'
 
 export interface LogEvent {
   id: number
@@ -110,16 +184,17 @@ export interface LogEvent {
   nodeId?: string
 }
 
-export interface AggregateResult {
-  totalDocs: number
-  totalWords: number
-  uniqueWords: number
-  frequencies: Record<string, number>
-  topWords: WordCount[]
+export interface SimulationSettings {
+  workerCount: number
+  schedule: ScheduleMode
+  mergeMode: MergeMode
+  chunksPerWorker: number
+  faultInjection: boolean
 }
 
 export interface SimulationState {
-  dataset: Dataset
+  dataset: SortingDataset
+  settings: SimulationSettings
   phase: Phase
   tick: number
   running: boolean
@@ -130,11 +205,17 @@ export interface SimulationState {
   queue: string[]
   events: LogEvent[]
   eventSeq: number
-  masterFrequencies: Record<string, number>
-  aggregate: AggregateResult | null
+  aggregate: SortAggregate | null
   aggregationMerged: number
-  baseline: AggregateResult
+  aggregationStartedTick: number | null
+  mergeGroups: MergeGroup[]
+  baseline: SortBaseline
   completedTick: number | null
+  faultsInjected: number
+  requeued: number
+  recoveredAtTick: number | null
 }
 
 export const BASE_TICK_SECONDS = 0.7
+export const MIN_WORKERS = 3
+export const MAX_WORKERS = 9
