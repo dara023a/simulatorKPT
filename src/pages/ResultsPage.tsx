@@ -39,7 +39,7 @@ export function ResultsPage() {
   const isPreview = !state.aggregate
 
   const topTen = aggregate.topWords.slice(0, 10)
-  const cloudWords = topWords(aggregate.frequencies, 55)
+  const cloudWords = topWords(aggregate.frequencies, 45)
   const successfulWorkers = state.workers.filter((worker) => worker.tasksCompleted > 0).length
   const docsData = state.workers.map((worker) => ({ worker: worker.id, docs: worker.docsProcessed }))
   const taskData = state.workers
@@ -113,7 +113,7 @@ export function ResultsPage() {
                 tickLine={false}
               />
               <Tooltip {...TOOLTIP_PROPS} />
-              <Bar dataKey="count" fill="#22d3ee" radius={[0, 4, 4, 0]} barSize={12} />
+              <Bar dataKey="count" fill="#22d3ee" radius={[0, 4, 4, 0]} barSize={12} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </Panel>
@@ -178,6 +178,7 @@ export function ResultsPage() {
                     outerRadius={92}
                     paddingAngle={2}
                     stroke="none"
+                    isAnimationActive={false}
                   >
                     {taskData.map((entry, index) => (
                       <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
