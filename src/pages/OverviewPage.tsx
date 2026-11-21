@@ -37,10 +37,11 @@ const FLOW = [
 ]
 
 export function OverviewPage() {
-  const { state, stats, play } = useSimulation()
+  const { state, stats, play, reset } = useSimulation()
   const navigate = useNavigate()
 
   const startSimulation = () => {
+    if (state.phase === 'completed') reset()
     play()
     navigate('/simulation')
   }
