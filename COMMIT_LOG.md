@@ -18,6 +18,7 @@ Semua commit di bawah ini sudah di-push ke `origin/main`.
 
 | Tanggal | Commit | Perubahan |
 | --- | --- | --- |
+| 2026-11-21 | `b8963e7` | Memperbarui README, UNFINISHED, metadata package, deskripsi HTML, dan status verifikasi untuk build distributed sorting. |
 | 2026-11-21 | `8db36be` | Menulis ulang test engine (sorting, scheduling, merge, fault tolerance, determinisme), test parser `results.csv`, dan smoke test browser untuk alur sorting. |
 | 2026-11-21 | `719ce7c` | Mengubah seluruh simulator dari text analytics menjadi distributed sorting: engine deterministik, 3–9 worker, dynamic/static queue, master/tiered merge, fault recovery, visual array/core run/merge tree, serta import benchmark. |
 | 2026-11-21 | `9463bc3` | Menambahkan referensi Python distributed sorting (`master_sort.py`, `worker_sort.py`, `common.py`, `prepare_dataset.py`) ke folder `python/`. |
