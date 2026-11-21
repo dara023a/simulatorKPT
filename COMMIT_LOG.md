@@ -18,6 +18,10 @@ Semua commit di bawah ini sudah di-push ke `origin/main`.
 
 | Tanggal | Commit | Perubahan |
 | --- | --- | --- |
+| 2026-11-21 | `8db36be` | Menulis ulang test engine (sorting, scheduling, merge, fault tolerance, determinisme), test parser `results.csv`, dan smoke test browser untuk alur sorting. |
+| 2026-11-21 | `719ce7c` | Mengubah seluruh simulator dari text analytics menjadi distributed sorting: engine deterministik, 3–9 worker, dynamic/static queue, master/tiered merge, fault recovery, visual array/core run/merge tree, serta import benchmark. |
+| 2026-11-21 | `9463bc3` | Menambahkan referensi Python distributed sorting (`master_sort.py`, `worker_sort.py`, `common.py`, `prepare_dataset.py`) ke folder `python/`. |
+| 2026-11-21 | `225b2bf` | Menambahkan aturan workflow commit dan file changelog permanen. |
 | 2026-11-21 | `1c6fcd5` | Memperbaiki scheduler yang macet: worker `registered` kini dapat menerima task, status `returning`/`completed` terlihat minimal satu tick, dan preview agregat memakai Counter worker yang sudah kembali. |
 | 2026-11-21 | `2b683ae` | Membuat urutan kata teratas independen dari locale agar hasil deterministik lintas environment. |
 | 2026-11-21 | `e2f4b20` | Menonaktifkan animasi Recharts pada grafik hasil agar bar dan pie langsung dirender konsisten. |
@@ -34,10 +38,10 @@ Semua commit di bawah ini sudah di-push ke `origin/main`.
 
 - `npm run typecheck` — lulus.
 - `npm run build` — lulus (hanya warning ukuran bundle).
-- `npm test` — 22/22 check lulus.
+- `npm test` — 27/27 check lulus.
 - `npm run test:ui` — seluruh check browser lulus, 0 console error.
 - `npm run preview` — halaman, favicon, dan asset merespons HTTP 200.
 
 ## Sisa pekerjaan
 
-Lihat bagian **Remaining work** di `UNFINISHED.md`. Catatan penting: `master.py` dan `worker.py` dari dosen belum tersedia, sehingga adaptasi Python dan Live Integration Mode belum dikerjakan.
+Lihat bagian **Remaining work** di `UNFINISHED.md`. Fokus utama berikutnya adalah Live Integration Mode dengan backend Python, import benchmark satu klik, upload array kustom, persistence, dan route-level code splitting.

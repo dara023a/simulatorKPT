@@ -1,12 +1,12 @@
-# Distributed Text Analytics — Master–Worker Simulation
+# Distributed Sorting — Master–Worker Simulation
 
-Interactive browser-based simulator for a Master–Worker distributed text analytics pipeline. It visualises how one master discovers workers, decomposes a document corpus into tasks, dispatches them to nine simulated workers, collects word-frequency results, and merges them into one deterministic aggregate.
+Interactive browser-based simulator for a Master–Worker distributed sorting pipeline. One master discovers 3–9 simulated workers, splits an integer array into chunks, dispatches work, workers sort their chunks in parallel per core, results return to the master, and a merge tree produces the final sorted output with checksum verification.
 
-This is a **Simulation Mode** demo. It does not connect to real worker machines, does not measure CPU or network usage, and is not a benchmark. All node addresses, timings, and results are simulated or computed locally from the selected corpus.
+This is a **Simulation Mode** demo. The worker nodes, IP addresses, core counts, ticks, failures, and network links are simulated. The array sorting, local-run merging, checksum, and final verification are real computations performed in the browser on deterministic data. It is not a cluster benchmark.
 
 ## Quick start
 
-Requirements: Node.js 22+ (the UI check uses the built-in WebSocket client) and npm.
+Requirements: Node.js 22+ and npm.
 
 ```bash
 npm install
@@ -24,64 +24,80 @@ npm run preview    # http://localhost:4173
 
 ```bash
 npm run typecheck   # TypeScript, no emit
-npm test            # headless simulation-engine checks (22 checks)
-npm run test:ui     # real browser interaction smoke test via Chrome DevTools Protocol
+npm test            # deterministic engine + CSV parser checks (27 checks)
+npm run build       # typecheck + production bundle
+npm run test:ui     # headless browser interaction check
 ```
 
-`npm test` runs the real engine over the sample, mini, and uploaded datasets and verifies:
+`npm test` runs the real engine over all three datasets and verifies:
 
 - the eight phases execute in order and the run terminates;
-- every document is covered exactly once and every task is aggregated;
-- `Returning Result`, `Completed`, `Receiving Task`, and `Processing` states occur;
-- worker Counters merge additively into exactly the full-corpus baseline;
-- rerunning the same dataset produces identical aggregates, timelines, and assignments;
-- empty uploads are rejected.
+- chunk ranges cover the array exactly once;
+- every local run and returned chunk is sorted with a matching checksum;
+- dynamic and static schedules produce the expected chunk counts;
+- master and tiered merge modes both finish with verified checksums;
+- fault injection requeues a chunk, recovers the worker, and still verifies;
+- rerunning the same configuration is deterministic;
+- `results.csv` parsing and benchmark summaries handle official columns, warnings, and invalid input.
 
-`npm run test:ui` serves the production build, drives a headless Chromium browser, and verifies start/play/pause/step/reset, completion, results charts, node inspector payloads, dataset switching, and a clean browser console. It looks for Chrome/Edge at common paths; set `CHROME_PATH` if needed. Screenshots are written to the system temp folder.
-
-## Stack
-
-- React 19 + TypeScript 5.7
-- Vite 7
-- Tailwind CSS v4 (`@tailwindcss/vite`)
-- React Flow (`@xyflow/react`) for the network topology
-- Recharts 3 for result charts
-- React Router 7
-- Lucide React icons
+`npm run test:ui` serves the production build, drives headless Chrome/Edge through CDP, and checks Start Simulation, speed, completion, results charts, merge tree, node inspector, Reset, Step, Play/Pause, worker-count changes, dataset switching, benchmark import UI, and a clean console. Screenshots are written to the system temp folder. Set `CHROME_PATH` if the browser is not at a default path.
 
 ## Pages
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Overview, architecture summary, current session, Start Simulation |
-| `/topology` | 1 master + 9 simulated workers, animated task/result links, clickable node inspector |
-| `/dataset` | Dataset selection, upload, category distribution, document preview |
-| `/tasks` | Task queue, per-worker load, full task table with expandable details |
-| `/simulation` | Play/Pause/Step/Reset, speed control, phase strip, worker fleet, queue, event log, master summary |
-| `/results` | Top-10 words, word cloud, docs per worker, task distribution, per-worker payloads, timeline |
+| `/` | Overview, architecture, current session, Start Simulation |
+| `/topology` | Master + configured workers, animated chunk/result packets, clickable inspector |
+| `/dataset` | Array presets, array/histogram preview, decomposition plan, `results.csv` import |
+| `/tasks` | Chunk queue, worker load, expandable chunk table with local core runs |
+| `/simulation` | Controls, run configuration, phase strip, parallel sort view, worker fleet, queue, event log |
+| `/results` | Sorted output, verification, charts, merge tree, worker payloads, timeline, Python benchmark analytics |
 
-## Simulation flow
+## Simulation engine
 
-Each tick advances a deterministic state machine (`src/engine/simulation.ts`):
+Each tick advances a deterministic state machine in `src/engine/simulation.ts`:
 
-1. **Initialization** — master starts with the selected corpus; workers are idle.
-2. **Node Discovery** — workers register one per tick.
-3. **Task Decomposition** — documents are split into fixed-size tasks.
-4. **Task Distribution** — the first batch is dispatched from the master queue.
-5. **Parallel Processing** — workers process tasks concurrently; simulated core counts affect task duration.
-6. **Result Return** — a finished worker enters `returning` for one tick, then `completed`; its Counter and metadata are returned to the master.
-7. **Result Aggregation** — the master merges worker Counters in batches of three.
-8. **Completed** — the final aggregate is published and results pages switch from Preview to Simulation Result.
+1. **Initialization** — master loads the selected array and computes the baseline checksum.
+2. **Node Discovery** — workers register one at a time.
+3. **Chunk Decomposition** — master splits the array using the selected schedule.
+4. **Task Distribution** — the first batch is dispatched; dynamic mode refills free workers.
+5. **Parallel Sorting** — each worker splits its chunk into local runs, sorts per simulated core, then merges locally.
+6. **Result Return** — sorted runs and checksums return to the master.
+7. **Merge & Verify** — master builds a merge tree (direct or tiered), then verifies sorted order and checksum.
+8. **Completed** — final sorted output and analytics are published.
 
-The scheduler keeps refilling free workers from the queue. This dynamic refill is a simulator enhancement; it is not a claim that the original course Python code performs the same dynamic load balancing.
+### Run configuration
 
-## Data and analytics
+- **Workers:** 3–9.
+- **Schedule:** `dynamic` pull queue (default, 4 chunks per worker) or `static` ownership by core share.
+- **Merge:** `master` (all runs merged at the master) or `tiered` (worker-tier merges first).
+- **Chunks/worker:** 1–4 in dynamic mode.
+- **Fault injection:** deterministic worker failure, heartbeat timeout, requeue, retry, and rejoin.
 
-- Built-in corpora: 240 documents / 20 categories (24 tasks) and 90 documents / 20 categories (15 tasks).
-- Uploaded corpora: `.txt` or `.md`, documents separated by blank lines, capped at 250 documents. Parsing happens locally in the browser.
-- Analysis: tokenization, stopword filtering, word frequency counting, unique word counting, document counting, top keywords.
-- The corpus generator is seeded, and all analytics are computed from the actual local text. There is no `Math.random()` in the analysis or result path.
-- Worker results are accumulated as Counters. During aggregation the master merges them additively; the final aggregate is checked against the full-corpus baseline by the automated engine test.
+Changing configuration resets the run so all pages remain consistent.
+
+## Datasets and benchmarks
+
+Built-in arrays are deterministic 8,192-item integer datasets with fixed seeds:
+
+- uniform random;
+- many duplicates;
+- nearly sorted.
+
+Selecting a dataset resets the baseline and all analytics. Arrays are generated locally; they are not measured device data.
+
+The **Dataset & Benchmarks** page can import `results.csv` produced by the Python reference. Those values are labelled **Measured** and are kept separate from the browser simulation. Recognised columns include `mode`, `algo`, `size`, `workers`, `schedule`, `merge`, `t_total`, `t_phase1`, `t_tier`, `t_merge`, `throughput_Melem_s`, `ok`, `failures`, `requeued`, `recovery_max_s`, and the remaining official `master_sort.py` fields. Unknown columns are ignored.
+
+## Python reference
+
+The distributed sorting reference is in [`python/`](python/README.md):
+
+- `master_sort.py` — sequential/local/distributed modes, UDP discovery, TCP sweep, dynamic pull queue, fault handling, merge modes, benchmark CSV output.
+- `worker_sort.py` — TCP task server, `ProcessPoolExecutor`, local per-core sorting and merge, heartbeat.
+- `common.py` — TCP framing, sorting/merge helpers, checksum.
+- `prepare_dataset.py` — optional OpenStreetMap `.osm.pbf` to `.npy` helper.
+
+The web simulator does not launch or connect to these Python processes. Live Integration Mode is not implemented.
 
 ## Project structure
 
@@ -89,19 +105,18 @@ The scheduler keeps refilling free workers from the queue. This dynamic refill i
 src/
   App.tsx, main.tsx, index.css, types.ts
   engine/
-    analyzer.ts            # tokenizer, stopwords, Word Counter merge/summary
-    simulation.ts          # 8-phase state machine, scheduler, aggregation
-    SimulationProvider.tsx # context, interval cleanup, controls, reducer
-  data/
-    corpus.ts              # seeded synthetic corpus generator
-    datasets.ts            # built-in datasets + local upload parser
+    sorting.ts             # datasets, sort/merge/checksum, local runs, merge tree
+    simulation.ts          # 8-phase state machine, scheduling, faults, aggregation
+    benchmark.ts           # results.csv parser and benchmark summary
+    SimulationProvider.tsx # context, controls, import state, interval cleanup
   components/
     layout/AppShell.tsx
     ui/Primitives.tsx
     network/NetworkGraph.tsx
     network/NodeDetailPanel.tsx
-    simulation/*
-    charts/WordCloud.tsx
+    simulation/*           # controls, settings, phases, workers, master summary, log
+    charts/                # array bars, histogram, local runs, merge tree, theme
+    benchmark/             # import card, charts, table
   pages/
     OverviewPage.tsx
     TopologyPage.tsx
@@ -110,8 +125,9 @@ src/
     SimulationPage.tsx
     ResultsPage.tsx
   lib/format.ts
+python/                    # Python reference implementation
 scripts/
-  check-simulation.mjs     # engine checks (bundled with esbuild)
+  check-simulation.mjs     # engine + benchmark parser checks
   check-ui.mjs             # headless browser checks
   simulation-entry.ts
 ```
@@ -121,48 +137,37 @@ scripts/
 Implemented and functional:
 
 - All six pages, routing, responsive layout, shared simulation state.
-- Master–Worker visualisation with nine simulated workers and animated links.
+- Real browser sorting, local merging, checksum verification, and histogram computation.
 - 8-phase deterministic simulation with Play, Pause, Step, Reset, and 0.5×/1×/2×/4× speed.
-- Deterministic dynamic task queue and batch aggregation.
-- Real local text analytics for the selected/generated/uploaded corpus.
-- Dataset upload with validation, dataset switching, previews, and charts.
+- Configurable workers, dynamic/static scheduling, master/tiered merge, fault injection.
+- Animated topology, clickable node inspector, parallel local-run visualisation, merge tree.
+- Deterministic array presets and `results.csv` benchmark import.
 - Automated engine and browser UI checks.
 
 Simulated, not real infrastructure:
 
-- The nine workers, their hostnames, `10.20.0.x` IP addresses, core counts, and timings.
-- UDP discovery on port 9999 and TCP transfer on port 9998 are described in the UI but no sockets are opened.
-- Simulated seconds per tick are a presentation clock, not wall-clock or benchmark measurements.
+- Worker nodes, hostnames, `10.20.0.x` IPs, simulated core counts, ticks, durations, and bandwidth.
+- UDP discovery (9999) and TCP transfer (9998) are represented visually; the browser opens no sockets.
+- Faults and recovery are deterministic simulation events.
 
 Not implemented:
 
-- Live Integration Mode with a real Python FastAPI/WebSocket backend.
-- Automatic download of the real 20 Newsgroups corpus through scikit-learn.
-- Triggerable worker-failure scenarios (the `failed` state exists in the UI type model but is not emitted).
-- State persistence in localStorage or URL.
-- Adaptation of the lecturer's `master.py` / `worker.py`.
-
-## Python reference code
-
-The original `master.py` and `worker.py` referenced in the project brief are **not present in this repository**, so they were not modified. The simulator is inspired by the same architecture:
-
-- master discovery and task dispatch;
-- worker task reception and local multiprocessing;
-- JSON-style result payloads returned to the master.
-
-When the reference files are provided, put them in `python/master.py` and `python/worker.py`. Read them first, keep the UDP discovery / TCP server and multiprocessing mechanisms where possible, replace prime-number work with the text-analysis functions, and add a separate Live Mode API rather than mixing it into the simulation engine.
+- Live Integration Mode with a Python/FastAPI/WebSocket backend.
+- Real cluster execution or real CPU/network measurement in the browser.
+- Persistence of simulation state in localStorage or the URL.
+- Per-user custom upload of integer arrays (only the three presets are available).
 
 ## Notes and limitations
 
-- Results must remain deterministic. Do not add random values to scheduling, assignment, or analytics.
-- One tick is 0.7 simulated seconds; speed changes only the browser interval, not the simulated result.
-- Selecting a dataset resets the simulation intentionally so all pages stay consistent.
-- The production bundle warns about a chunk over 500 kB. This comes from React Flow and Recharts and is not a build failure. Route-level code splitting can reduce it later.
-- Metrics on screen are labelled Demo Data, Simulated, Preview, or Simulation Result. Nothing is presented as a real cluster benchmark.
+- Results must remain deterministic. Do not add `Math.random()` to scheduling, sorting, or analytics.
+- One tick is 0.7 simulated seconds; speed only changes the browser interval.
+- The production bundle warns about a chunk over 500 kB from React Flow and Recharts; this is not a build failure.
+- Metrics are labelled Simulated, Demo Data, Preview, Simulation Result, or Measured (for imported CSV rows).
+- No value on screen is presented as a real cluster benchmark.
 
 ## Troubleshooting
 
-- **esbuild install script blocked by npm.** If Vite or `npm test` reports a missing esbuild binary, run `npm rebuild esbuild` (or approve the package with `npm approve-scripts` if your npm version asks). Verify with `node -e "console.log(require('esbuild').version)"`.
-- **`npm install` gets killed on a low-memory machine.** Retry with `npm install --no-audit --no-fund`; alternatively use a package manager with lower peak memory or install on a machine with more RAM.
+- **esbuild install script blocked by npm.** Run `npm rebuild esbuild` (or approve the package with `npm approve-scripts` if supported).
+- **`npm install` gets killed on a low-memory machine.** Retry with `npm install --no-audit --no-fund`.
 - **`npm run test:ui` skips.** No Chrome/Chromium/Edge executable was found. Set `CHROME_PATH` to a Chromium-based browser binary.
-
+- **`results.csv` import fails.** Ensure the header includes `mode` plus at least one of `t_total` or `throughput_Melem_s`, and that data rows contain a timing or worker value.
