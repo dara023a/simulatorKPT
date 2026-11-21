@@ -70,7 +70,7 @@ export function SimulationControls() {
               finished ? 'bg-emerald-400' : state.running ? 'animate-pulse bg-cyan-400' : 'bg-slate-500',
             )}
           />
-          {finished ? 'Finished' : state.running ? 'Running' : 'Paused'}
+          {finished ? 'Finished' : state.running ? 'Running' : state.phase === 'ready' ? 'Ready' : 'Paused'}
         </span>
         <span className="font-mono tabular-nums">
           tick {state.tick} · {formatSeconds(stats.simulatedSeconds)} simulated
