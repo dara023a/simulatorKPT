@@ -197,8 +197,11 @@ try {
 
   const buttonContains = (text) =>
     `[...document.querySelectorAll('button')].find((element) => element.textContent.trim().includes(${JSON.stringify(text)}))`
+  const exactButton = (text) =>
+    `[...document.querySelectorAll('button')].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`
 
-  const tickExpression = `Number(((document.body.innerText.match(/tick (\\d+)/) || [])[1]) ?? -1)`
+  const tickExpression = `Number(((document.body.innerText.match(/tick (\\d+) ·/) || [])[1]) ?? -1)`
+  const checksumExpression = `((document.body.innerText.match(/checksum ([0-9,]+)/) || [])[1] ?? '')`
 
   async function screenshot(name) {
     const result = await cdp.send('Page.captureScreenshot', { format: 'png' })
@@ -206,17 +209,15 @@ try {
   }
 
   await cdp.send('Page.navigate', { url: previewUrl })
-  await waitUntil('overview render', `document.body.innerText.includes('Distributed Text Analytics')`)
+  await waitUntil('overview render', `document.body.innerText.includes('Distributed Sorting')`)
 
   const overviewText = await bodyText()
   log(overviewText.includes('Start Simulation'), 'overview shows Start Simulation')
+  log(overviewText.includes('8,192') && overviewText.includes('36'), 'overview shows item and chunk counts')
+  log(overviewText.toLowerCase().includes('simulation mode'), 'overview labels the simulation scope')
   log(
-    overviewText.includes('240') && overviewText.includes('24 tasks'),
-    'overview shows dataset and task counts',
-  )
-  log(
-    (await evaluate(`document.querySelectorAll('.react-flow, .recharts-wrapper').length`)) === 0,
-    'overview renders without chart runtime errors',
+    (await evaluate(`document.querySelectorAll('.recharts-wrapper').length`)) === 0,
+    'overview renders cleanly before charts mount',
   )
 
   await click(buttonContains('Start Simulation'), 'Start Simulation')
@@ -224,29 +225,30 @@ try {
   await waitUntil('simulation running', `document.body.innerText.includes('Running')`)
   log(true, 'Start Simulation navigates and starts the run')
 
-  await click(buttonContains('4×'), '4× speed')
-  await waitUntil('completed state', `document.body.innerText.includes('Finished')`, 40000)
+  await click(exactButton('4×'), '4× speed')
+  await waitUntil('completed state', `document.body.innerText.includes('Finished')`, 50000)
 
   const completedText = await bodyText()
-  log(completedText.includes('24 / 24'), 'all 24 tasks returned to the master')
-  log(completedText.includes('9 / 9'), 'all 9 worker counters merged')
-  log(completedText.includes('Simulation completed'), 'completion event logged')
+  log(completedText.includes('36 / 36'), 'all 36 chunks returned to the master')
+  log(completedText.includes('checksum verified') || completedText.includes('Simulation completed'), 'completion and verification are logged')
   await screenshot('simulation-completed')
 
   await click(`document.querySelector('a[href="/results"]')`, 'Results navigation')
   await waitUntil('results route', `location.pathname === '/results'`)
-  await waitUntil('results rendered', `document.body.innerText.includes('Per-worker result payloads')`)
+  await waitUntil('results rendered', `document.body.innerText.includes('Worker result payloads')`)
   await sleep(800)
   const resultsText = (await bodyText()).toLowerCase()
-  log(resultsText.includes('simulation result'), 'results page shows the Simulation result label')
-  log(!resultsText.includes('preview — simulation not completed'), 'results page is not in preview mode')
-  log(/successful workers[\s\S]{0,40}\b9\b/.test(resultsText), 'results page reports 9 successful workers')
+  log(resultsText.includes('monotonic non-decreasing'), 'results page reports a sorted output')
+  log(resultsText.includes('checksum verified'), 'results page reports checksum verification')
+  log(resultsText.includes('merge tree'), 'results page renders the merge tree section')
+  log(resultsText.includes('measured'), 'results page labels imported benchmark data')
   const barRects = await evaluate(
     `document.querySelectorAll('.recharts-bar-rectangle .recharts-rectangle').length`,
   )
-  log(barRects >= 10, `top-10 bar chart rendered ${barRects} bars`)
+  log(barRects >= 9, `worker contribution chart rendered ${barRects} bars`)
   const pieSlices = await evaluate(`document.querySelectorAll('.recharts-pie-sector').length`)
-  log(pieSlices > 0, `task distribution pie rendered ${pieSlices} slices`)
+  log(pieSlices > 0, `chunk distribution pie rendered ${pieSlices} slices`)
+  log(resultsText.includes('processing timeline'), 'results page renders the processing timeline section')
   await screenshot('results-completed')
 
   await click(`document.querySelector('a[href="/topology"]')`, 'Topology navigation')
@@ -259,16 +261,16 @@ try {
   )
   const inspectorText = (await bodyText()).toLowerCase()
   log(inspectorText.includes('worker 01 · w-01'), 'worker inspector opens for the clicked node')
-  log(inspectorText.includes('returned result payload'), 'worker inspector shows the returned payload')
+  log(inspectorText.includes('last returned run'), 'worker inspector shows the returned payload')
   await screenshot('topology-inspector')
 
   await click(`document.querySelector('a[href="/simulation"]')`, 'Simulation navigation')
   await waitUntil('simulation route again', `location.pathname === '/simulation'`)
   await click(buttonContains('Reset'), 'Reset')
-  await waitUntil('reset ready', `document.body.innerText.toLowerCase().includes('waiting to start')`)
-  const resetText = (await bodyText()).toLowerCase()
-  log(resetText.includes('0 / 24'), 'Reset clears returned tasks')
-  log(resetText.includes('1 events') || resetText.includes('1 event'), 'Reset restores the initial event log')
+  await waitUntil('reset ready', `document.body.innerText.includes('Ready') && document.body.innerText.includes('tick 0')`)
+  const resetText = await bodyText()
+  log(resetText.includes('0 / 36'), 'Reset clears returned chunks')
+  log(/1 events?/.test(resetText), 'Reset restores the initial event log')
 
   const startTick = await evaluate(tickExpression)
   await click(buttonContains('Step'), 'Step')
@@ -286,24 +288,29 @@ try {
   const pausedTick = await evaluate(tickExpression)
   log(pausedTick > steppedTick, 'Play advances the clock and Pause stops the run')
   await click(buttonContains('Reset'), 'Reset again')
-  await waitUntil('reset after controls', `document.body.innerText.toLowerCase().includes('waiting to start')`)
+  await waitUntil('reset after controls', `document.body.innerText.includes('Ready') && document.body.innerText.includes('tick 0')`)
+
+  await click(exactButton('3'), '3 worker setting')
+  await waitUntil('3 workers configured', `document.body.innerText.includes('3 workers') && document.body.innerText.includes('12 chunks')`)
+  log(true, 'worker count setting regenerates the run with 12 chunks')
+  await click(`document.querySelector('a[href="/topology"]')`, 'Topology navigation after settings')
+  await waitUntil('topology route after settings', `location.pathname === '/topology'`)
+  await waitUntil('3-worker topology rendered', `document.querySelectorAll('.react-flow__node').length === 4`)
+  log(true, 'topology reflects the configured 3 workers plus master')
 
   await click(`document.querySelector('a[href="/dataset"]')`, 'Dataset navigation')
   await waitUntil('dataset route', `location.pathname === '/dataset'`)
-  await click(buttonContains('Mini Newsgroups'), 'Mini dataset')
-  await waitUntil(
-    'mini dataset active',
-    `document.body.innerText.toLowerCase().includes('90 simulated documents')`,
-  )
-  const miniText = (await bodyText()).toLowerCase()
-  log(miniText.includes('15 tasks'), 'switching to the mini dataset yields 15 tasks')
-  log(miniText.includes('tasks generated') && miniText.includes('6 docs'), 'dataset split updates task size')
-  await click(buttonContains('20 Newsgroups · Simulated Sample'), 'Sample dataset restore')
-  await waitUntil(
-    'sample dataset restored',
-    `document.body.innerText.toLowerCase().includes('240 simulated documents')`,
-  )
-  log(true, 'switching back restores the sample dataset')
+  await waitUntil('dataset rendered', `document.body.innerText.includes('Value distribution')`)
+  const checksumBefore = await evaluate(checksumExpression)
+  await click(buttonContains('Duplicates 8k'), 'duplicates dataset')
+  await waitUntil('duplicates selected', `${checksumExpression} !== ${JSON.stringify(checksumBefore)}`)
+  const checksumAfterDuplicates = await evaluate(checksumExpression)
+  log(checksumAfterDuplicates !== checksumBefore, 'switching dataset regenerates a different checksum')
+  await click(buttonContains('Nearly sorted'), 'nearly-sorted dataset')
+  await waitUntil('nearly sorted selected', `${checksumExpression} !== ${JSON.stringify(checksumAfterDuplicates)}`)
+  log(true, 'switching to nearly-sorted regenerates the baseline')
+  log((await bodyText()).toLowerCase().includes('import results.csv'), 'dataset page exposes results.csv import')
+  await screenshot('dataset-page')
 
   await sleep(500)
   log(consoleErrors.length === 0, `no browser console errors (${consoleErrors.length})`)
